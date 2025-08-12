@@ -30,37 +30,31 @@ async function init() {
 function normalize(raw) {
   return raw.map(hero => {
     // Weight: choose metric if available, else imperial, else dash
-    const impW  = hero.appearance.weight[0]; // e.g. "210 lb"
-    const metW  = hero.appearance.weight[1]; // e.g. "0 kg" or "4 tons"
+    const impW  = hero.appearance.weight[0];
+    const metW  = hero.appearance.weight[1];
     const metKg = parseWeight(metW);
     const impKg = parseWeight(impW);
     let weightVal, weightRaw;
     if (metKg > 0) {
-      weightVal = metKg;
-      weightRaw = metW;
+      weightVal = metKg; weightRaw = metW;
     } else if (impKg > 0) {
-      weightVal = impKg;
-      weightRaw = impW;
+      weightVal = impKg; weightRaw = impW;
     } else {
-      weightVal = null;
-      weightRaw = '-';
+      weightVal = null; weightRaw = '-';
     }
 
-    // Height: metric cm/m, or imperial feet'inches", else dash
-    const impH  = hero.appearance.height[0]; // e.g. "6'7\""
-    const metH  = hero.appearance.height[1]; // e.g. "203 cm" or "1.75 m"
+    // Height: choose metric if available, else imperial, else dash
+    const impH  = hero.appearance.height[0];
+    const metH  = hero.appearance.height[1];
     const metCm = parseHeight(metH);
     const impCm = parseHeight(impH);
     let heightVal, heightRaw;
     if (metCm > 0) {
-      heightVal = metCm;
-      heightRaw = metH;
+      heightVal = metCm; heightRaw = metH;
     } else if (impCm > 0) {
-      heightVal = impCm;
-      heightRaw = impH;
+      heightVal = impCm; heightRaw = impH;
     } else {
-      heightVal = null;
-      heightRaw = '-';
+      heightVal = null; heightRaw = '-';
     }
 
     return {
@@ -97,9 +91,9 @@ function parseWeight(str = '') {
   const clean = str.replace(/,/g, '').toLowerCase();
   const n = parseFloat(clean);
   if (isNaN(n)) return null;
-  if (clean.includes('ton')) return n * 1000;       // metric tons → kg
-  if (clean.includes('kg'))  return n;               // kilograms
-  if (clean.includes('lb'))  return n * 0.453592;    // pounds → kg
+  if (clean.includes('ton')) return n * 1000;
+  if (clean.includes('kg'))  return n;
+  if (clean.includes('lb'))  return n * 0.453592;
   return n;
 }
 
@@ -116,8 +110,7 @@ function parseHeight(str = '') {
   }
   const match = clean.match(/(\d+)'(\d+)/);
   if (match) {
-    const feet = Number(match[1]);
-    const inches = Number(match[2]);
+    const feet = Number(match[1]), inches = Number(match[2]);
     return feet * 30.48 + inches * 2.54;
   }
   return null;
@@ -130,15 +123,22 @@ function renderApp() {
     !term || h.name.toLowerCase().includes(term)
   );
 
-  // Sort: missing values last
+  // Sort: normal values first, then special-start strings, then '-' entries
   state.filteredHeroes.sort((a, b) => {
-    const fa = a[state.sortField];
-    const fb = b[state.sortField];
+    const fa = a[state.sortField], fb = b[state.sortField];
     const missA = fa == null || fa === '-';
     const missB = fb == null || fb === '-';
     if (missA && missB) return 0;
     if (missA) return 1;
     if (missB) return -1;
+
+    // detect special-start (non-alphanumeric) for string fields
+    const spA = (typeof fa === 'string') && !/^[A-Za-z0-9]/.test(fa);
+    const spB = (typeof fb === 'string') && !/^[A-Za-z0-9]/.test(fb);
+    if (!spA && spB) return -1;
+    if (spA && !spB) return 1;
+
+    // both normal or both special
     if (typeof fa === 'string') {
       return state.sortDirection === 'asc'
         ? fa.localeCompare(fb)
@@ -147,7 +147,6 @@ function renderApp() {
     return state.sortDirection === 'asc' ? fa - fb : fb - fa;
   });
 
-  // Paginate
   const slice = state.pageSize === 'all'
     ? state.filteredHeroes
     : state.filteredHeroes.slice(
@@ -174,46 +173,43 @@ function renderTable(heroes) {
     'birthPlace','alignment'
   ];
   const labels = {
-    icon: '', name: 'Name', fullName: 'Full Name',
-    intelligence: 'Intelligence', strength: 'Strength', speed: 'Speed',
-    durability: 'Durability', power: 'Power', combat: 'Combat',
-    race: 'Race', gender: 'Gender', heightRaw: 'Height', weightRaw: 'Weight',
-    birthPlace: 'Place of Birth', alignment: 'Alignment'
+    icon:'', name:'Name', fullName:'Full Name',
+    intelligence:'Intelligence', strength:'Strength', speed:'Speed',
+    durability:'Durability', power:'Power', combat:'Combat',
+    race:'Race', gender:'Gender', heightRaw:'Height', weightRaw:'Weight',
+    birthPlace:'Place of Birth', alignment:'Alignment'
   };
 
   const thead = document.querySelector('#hero-table thead');
   const tbody = document.querySelector('#hero-table tbody');
 
-  // Headers
   thead.innerHTML = '<tr>' + cols.map(c => {
     const field = c.replace(/Raw$/, '');
     const sorted = state.sortField === field;
-    const arrow = sorted ? (state.sortDirection === 'asc' ? ' ▲' : ' ▼') : '';
+    const arrow  = sorted ? (state.sortDirection==='asc'?' ▲':' ▼') : '';
     return `<th data-field="${field}">${labels[c]}${arrow}</th>`;
   }).join('') + '</tr>';
 
-  // Rows
   tbody.innerHTML = heroes.map(h => `
     <tr data-id="${h.id}">
       <td><img src="${h.icon}" alt=""></td>
       <td>${h.name}</td>
       <td>${h.fullName}</td>
-      <td>${h.intelligence ?? '-'}</td>
-      <td>${h.strength ?? '-'}</td>
-      <td>${h.speed ?? '-'}</td>
-      <td>${h.durability ?? '-'}</td>
-      <td>${h.power ?? '-'}</td>
-      <td>${h.combat ?? '-'}</td>
+      <td>${h.intelligence  ?? '-'}</td>
+      <td>${h.strength      ?? '-'}</td>
+      <td>${h.speed         ?? '-'}</td>
+      <td>${h.durability    ?? '-'}</td>
+      <td>${h.power         ?? '-'}</td>
+      <td>${h.combat        ?? '-'}</td>
       <td>${h.race}</td>
       <td>${h.gender}</td>
-      <td>${h.heightRaw ?? '-'}</td>
-      <td>${h.weightRaw ?? '-'}</td>
+      <td>${h.heightRaw     ?? '-'}</td>
+      <td>${h.weightRaw     ?? '-'}</td>
       <td>${h.birthPlace}</td>
       <td>${h.alignment}</td>
     </tr>
   `).join('');
 
-  // Sorting handlers
   thead.querySelectorAll('th').forEach(th => {
     th.onclick = () => {
       const field = th.dataset.field;
@@ -227,7 +223,6 @@ function renderTable(heroes) {
     };
   });
 
-  // Detail view handlers
   tbody.querySelectorAll('tr').forEach(tr => {
     tr.onclick = () => {
       state.selectedHero = state.filteredHeroes.find(h => h.id === Number(tr.dataset.id)) || null;
@@ -237,15 +232,15 @@ function renderTable(heroes) {
 }
 
 function renderPagination() {
-  const pc = document.getElementById('pagination-controls');
+  const pc    = document.getElementById('pagination-controls');
   const total = state.filteredHeroes.length;
-  const size = state.pageSize === 'all' ? total : Number(state.pageSize);
-  const pages = Math.ceil(total / size) || 1;
+  const size  = state.pageSize === 'all' ? total : Number(state.pageSize);
+  const pages = Math.ceil(total/size) || 1;
   let html = '';
-  if (pages > 1) {
-    html += `<button id="prev" ${state.currentPage <= 1 ? 'disabled' : ''}>Prev</button>`;
+  if (pages>1) {
+    html += `<button id="prev" ${state.currentPage<=1?'disabled':''}>Prev</button>`;
     html += ` Page ${state.currentPage} of ${pages} `;
-    html += `<button id="next" ${state.currentPage >= pages ? 'disabled' : ''}>Next</button>`;
+    html += `<button id="next" ${state.currentPage>=pages?'disabled':''}>Next</button>`;
   }
   pc.innerHTML = html;
   pc.querySelector('#prev')?.addEventListener('click', () => { state.currentPage--; renderApp(); });
@@ -261,18 +256,18 @@ function renderDetail() {
     <h2>${h.name} (${h.fullName})</h2>
     <img src="${h.largeImage}" alt="">
     <ul>
-      <li><strong>Intelligence:</strong> ${h.intelligence ?? '-'}</li>
-      <li><strong>Strength:</strong> ${h.strength ?? '-'}</li>
-      <li><strong>Speed:</strong> ${h.speed ?? '-'}</li>
-      <li><strong>Durability:</strong> ${h.durability ?? '-'}</li>
-      <li><strong>Power:</strong> ${h.power ?? '-'}</li>
-      <li><strong>Combat:</strong> ${h.combat ?? '-'}</li>
-      <li><strong>Race:</strong> ${h.race}</li>
-      <li><strong>Gender:</strong> ${h.gender}</li>
-      <li><strong>Height:</strong> ${h.heightRaw ?? '-'}</li>
-      <li><strong>Weight:</strong> ${h.weightRaw ?? '-'}</li>
-      <li><strong>Born in:</strong> ${h.birthPlace}</li>
-      <li><strong>Alignment:</strong> ${h.alignment}</li>
+      <li><strong>Intelligence:</strong> ${h.intelligence  ?? '-'}</li>
+      <li><strong>Strength:</strong>     ${h.strength      ?? '-'}</li>
+      <li><strong>Speed:</strong>        ${h.speed         ?? '-'}</li>
+      <li><strong>Durability:</strong>   ${h.durability    ?? '-'}</li>
+      <li><strong>Power:</strong>        ${h.power         ?? '-'}</li>
+      <li><strong>Combat:</strong>       ${h.combat        ?? '-'}</li>
+      <li><strong>Race:</strong>         ${h.race}</li>
+      <li><strong>Gender:</strong>       ${h.gender}</li>
+      <li><strong>Height:</strong>       ${h.heightRaw     ?? '-'}</li>
+      <li><strong>Weight:</strong>       ${h.weightRaw     ?? '-'}</li>
+      <li><strong>Born in:</strong>      ${h.birthPlace}</li>
+      <li><strong>Alignment:</strong>    ${h.alignment}</li>
     </ul>
   `;
   d.hidden = false;
