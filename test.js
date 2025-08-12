@@ -29,25 +29,33 @@ async function init() {
 // --- Normalize & Unit Parsing (with fallback imperial) ---
 function normalize(raw) {
   return raw.map(hero => {
-    const imperialRaw = hero.appearance.weight[0]; // e.g. "210 lb"
-    const metricRaw   = hero.appearance.weight[1]; // e.g. "0 kg" or "4 tons"
-    const metricKg    = parseWeight(metricRaw);
-    const imperialKg  = parseWeight(imperialRaw);
-
+    // Weight: choose metric if available, else imperial, else dash
+    const impW  = hero.appearance.weight[0]; // e.g. "210 lb"
+    const metW  = hero.appearance.weight[1]; // e.g. "4 tons"
+    const metKg = parseWeight(metW);
+    const impKg = parseWeight(impW);
     let weightVal, weightRaw;
-    if (metricKg && metricKg > 0) {
-      weightVal = metricKg;
-      weightRaw = metricRaw;
-    } else if (imperialKg && imperialKg > 0) {
-      weightVal = imperialKg;
-      weightRaw = imperialRaw;
+    if (metKg > 0) {
+      weightVal = metKg; weightRaw = metW;
+    } else if (impKg > 0) {
+      weightVal = impKg; weightRaw = impW;
     } else {
-      weightVal = null;
-      weightRaw = '-';
+      weightVal = null; weightRaw = '-';
     }
 
-    const heightRaw = hero.appearance.height[1];  // e.g. "203 cm"
-    const heightVal = parseNum(heightRaw) || null;
+    // Height: metric cm/m, or imperial feet'inches", else dash
+    const impH  = hero.appearance.height[0]; // e.g. "6'7\""
+    const metH  = hero.appearance.height[1]; // e.g. "203 cm" or "1.75 m"
+    const metCm = parseHeight(metH);
+    const impCm = parseHeight(impH);
+    let heightVal, heightRaw;
+    if (metCm > 0) {
+      heightVal = metCm; heightRaw = metH;
+    } else if (impCm > 0) {
+      heightVal = impCm; heightRaw = impH;
+    } else {
+      heightVal = null; heightRaw = '-';
+    }
 
     return {
       id: hero.id,
@@ -78,46 +86,62 @@ function parseStat(val) {
   return isNaN(n) ? null : n;
 }
 
-function parseNum(str = '') {
-  const num = str.replace(/[^0-9.]/g, '');
-  const n = Number(num);
-  return isNaN(n) ? null : n;
-}
-
-// Parse weight strings into kilograms (handles commas, tons, kg, lb)
+// Parse weight strings into kg
 function parseWeight(str = '') {
   const clean = str.replace(/,/g, '').toLowerCase();
   const n = parseFloat(clean);
   if (isNaN(n)) return null;
   if (clean.includes('ton')) {
-    return n * 1000;       // metric tons → kg
+    return n * 1000;
   }
   if (clean.includes('kg')) {
     return n;
   }
   if (clean.includes('lb')) {
-    return n * 0.453592;   // pounds → kg
+    return n * 0.453592;
   }
   return n;
 }
 
+// Parse height strings into cm
+function parseHeight(str = '') {
+  const clean = str.trim().toLowerCase();
+  // metric cm
+  if (clean.includes('cm')) {
+    const num = parseFloat(clean);
+    return isNaN(num) ? null : num;
+  }
+  // metric m
+  if (clean.includes('m') && !clean.includes('cm')) {
+    const num = parseFloat(clean);
+    return isNaN(num) ? null : num * 100;
+  }
+  // imperial feet'inches", e.g. 6'7"
+  const match = clean.match(/(\d+)'(\d+)/);
+  if (match) {
+    const feet = Number(match[1]);
+    const inches = Number(match[2]);
+    return feet * 30.48 + inches * 2.54;
+  }
+  return null;
+}
+
 // --- Render Cycle ---
 function renderApp() {
-  // Filter
   const term = state.searchTerm.toLowerCase();
   state.filteredHeroes = state.allHeroes.filter(h =>
     !term || h.name.toLowerCase().includes(term)
   );
 
-  // Sort (missing values last)
+  // Sort missing last
   state.filteredHeroes.sort((a, b) => {
     const fa = a[state.sortField];
     const fb = b[state.sortField];
-    const missingA = fa === null || fa === undefined || fa === '-';
-    const missingB = fb === null || fb === undefined || fb === '-';
-    if (missingA && missingB) return 0;
-    if (missingA) return 1;
-    if (missingB) return -1;
+    const missA = fa == null;
+    const missB = fb == null;
+    if (missA && missB) return 0;
+    if (missA) return 1;
+    if (missB) return -1;
     if (typeof fa === 'string') {
       return state.sortDirection === 'asc'
         ? fa.localeCompare(fb)
@@ -126,15 +150,13 @@ function renderApp() {
     return state.sortDirection === 'asc' ? fa - fb : fb - fa;
   });
 
-  // Paginate
-  const slice = (state.pageSize === 'all')
+  const slice = state.pageSize === 'all'
     ? state.filteredHeroes
     : state.filteredHeroes.slice(
         (state.currentPage - 1) * Number(state.pageSize),
         (state.currentPage - 1) * Number(state.pageSize) + Number(state.pageSize)
       );
 
-  // Render
   renderControls();
   renderTable(slice);
   renderPagination();
@@ -164,7 +186,6 @@ function renderTable(heroes) {
   const thead = document.querySelector('#hero-table thead');
   const tbody = document.querySelector('#hero-table tbody');
 
-  // Headers
   thead.innerHTML = '<tr>' + cols.map(c => {
     const field = c.replace(/Raw$/, '');
     const sorted = state.sortField === field;
@@ -172,7 +193,6 @@ function renderTable(heroes) {
     return `<th data-field="${field}">${labels[c]}${arrow}</th>`;
   }).join('') + '</tr>';
 
-  // Rows
   tbody.innerHTML = heroes.map(h => `
     <tr data-id="${h.id}">
       <td><img src="${h.icon}" alt=""></td>
@@ -193,7 +213,6 @@ function renderTable(heroes) {
     </tr>
   `).join('');
 
-  // Sorting handlers
   thead.querySelectorAll('th').forEach(th => {
     th.onclick = () => {
       const field = th.dataset.field;
@@ -207,11 +226,9 @@ function renderTable(heroes) {
     };
   });
 
-  // Detail view handlers
   tbody.querySelectorAll('tr').forEach(tr => {
     tr.onclick = () => {
-      const id = Number(tr.dataset.id);
-      state.selectedHero = state.filteredHeroes.find(h => h.id === id) || null;
+      state.selectedHero = state.filteredHeroes.find(h => h.id === Number(tr.dataset.id)) || null;
       renderDetail();
     };
   });
@@ -229,12 +246,8 @@ function renderPagination() {
     html += `<button id="next" ${state.currentPage >= pages ? 'disabled' : ''}>Next</button>`;
   }
   pc.innerHTML = html;
-  pc.querySelector('#prev')?.addEventListener('click', () => {
-    state.currentPage--; renderApp();
-  });
-  pc.querySelector('#next')?.addEventListener('click', () => {
-    state.currentPage++; renderApp();
-  });
+  pc.querySelector('#prev')?.addEventListener('click', () => { state.currentPage--; renderApp(); });
+  pc.querySelector('#next')?.addEventListener('click', () => { state.currentPage++; renderApp(); });
 }
 
 function renderDetail() {
