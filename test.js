@@ -288,6 +288,11 @@ function attachEventListeners() {
     state.currentPage = 1;
     renderApp();
   });
+  
+  // Add logo click handler for refresh
+  document.getElementById('logo').addEventListener('click', () => {
+    window.location.reload();
+  });
 }
 
 // --- Start ---
