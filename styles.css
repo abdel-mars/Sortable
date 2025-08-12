@@ -99,6 +99,18 @@ header h1 {
   white-space: normal;
 }
 
+/* Make the Name column (second column) sticky vertically under header */
+#hero-table tbody td:nth-child(2) {
+  position: sticky;
+  top: 60px; /* Position under the sticky header */
+  z-index: 5;
+  background: var(--card-bg);
+}
+
+#hero-table tbody tr:hover td:nth-child(2) {
+  background: var(--hover-bg);
+}
+
 /* Fixed sticky headers - positioned relative to table container */
 #hero-table thead th {
   position: sticky;
