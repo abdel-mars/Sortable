@@ -1,3 +1,5 @@
+// test.js
+
 // --- State ---
 const state = {
   allHeroes: [],
@@ -24,45 +26,84 @@ async function init() {
   }
 }
 
+// --- Normalize & Unit Parsing ---
 function normalize(raw) {
-  return raw.map(hero => ({
-    id: hero.id,
-    icon: hero.images.xs,
-    name: hero.name,
-    fullName: hero.biography.fullName || '',
-    intelligence: parseNum(hero.powerstats.intelligence),
-    strength: parseNum(hero.powerstats.strength),
-    speed: parseNum(hero.powerstats.speed),
-    durability: parseNum(hero.powerstats.durability),
-    power: parseNum(hero.powerstats.power),
-    combat: parseNum(hero.powerstats.combat),
-    race: hero.appearance.race || '',
-    gender: hero.appearance.gender || '',
-    height: parseNum(hero.appearance.height[1]),
-    weight: parseNum(hero.appearance.weight[1]),
-    birthPlace: hero.biography.placeOfBirth || '',
-    alignment: hero.biography.alignment || '',
-    largeImage: hero.images.lg
-  }));
+  return raw.map(hero => {
+    const heightRaw = hero.appearance.height[1];    // e.g. "203 cm"
+    const weightRaw = hero.appearance.weight[1];    // e.g. "9,000 tons"
+    return {
+      id: hero.id,
+      icon: hero.images.xs,
+      name: hero.name,
+      fullName: hero.biography.fullName || '',
+      intelligence: parseStat(hero.powerstats.intelligence),
+      strength:     parseStat(hero.powerstats.strength),
+      speed:        parseStat(hero.powerstats.speed),
+      durability:   parseStat(hero.powerstats.durability),
+      power:        parseStat(hero.powerstats.power),
+      combat:       parseStat(hero.powerstats.combat),
+      race: hero.appearance.race || '',
+      gender: hero.appearance.gender || '',
+      height: parseNum(heightRaw),
+      weight: parseWeight(weightRaw),
+      heightRaw,
+      weightRaw,
+      birthPlace: hero.biography.placeOfBirth || '',
+      alignment: hero.biography.alignment || '',
+      largeImage: hero.images.lg
+    };
+  });
 }
-function parseNum(val) { const n = Number(val); return isNaN(n) ? null : n; }
+
+function parseStat(val) {
+  const n = Number(val);
+  return isNaN(n) ? null : n;
+}
+
+function parseNum(str = '') {
+  const num = str.replace(/[^0-9.]/g, '');
+  const n = Number(num);
+  return isNaN(n) ? null : n;
+}
+
+// --- FIXED: parseWeight now removes commas before parsing ---
+function parseWeight(str = '') {
+  const clean = str.replace(/,/g, '').toLowerCase(); // strip commas
+  const n = parseFloat(clean);
+  if (isNaN(n)) return null;
+  if (clean.includes('ton')) {
+    // metric tons -> kilograms
+    return n * 1000;
+  } else if (clean.includes('kg')) {
+    return n;
+  } else if (clean.includes('lb')) {
+    // pounds to kg
+    return n * 0.453592;
+  }
+  return n;
+}
 
 // --- Render Cycle ---
 function renderApp() {
-  // Filter
+  // Filter by search term
   const term = state.searchTerm.toLowerCase();
-  state.filteredHeroes = state.allHeroes.filter(h => !term || h.name.toLowerCase().includes(term));
+  state.filteredHeroes = state.allHeroes.filter(h =>
+    !term || h.name.toLowerCase().includes(term)
+  );
 
   // Sort
   state.filteredHeroes.sort((a, b) => {
-    const fa = a[state.sortField], fb = b[state.sortField];
-    if (fa == null && fb == null) return 0;
-    if (fa == null) return 1;
-    if (fb == null) return -1;
-    if (typeof fa === 'string') {
-      return state.sortDirection === 'asc' ? fa.localeCompare(fb) : fb.localeCompare(fa);
+    const va = a[state.sortField];
+    const vb = b[state.sortField];
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (typeof va === 'string') {
+      return state.sortDirection === 'asc'
+        ? va.localeCompare(vb)
+        : vb.localeCompare(va);
     }
-    return state.sortDirection === 'asc' ? fa - fb : fb - fa;
+    return state.sortDirection === 'asc' ? va - vb : vb - va;
   });
 
   // Paginate
@@ -73,7 +114,7 @@ function renderApp() {
         (state.currentPage - 1) * Number(state.pageSize) + Number(state.pageSize)
       );
 
-  // Render
+  // Render UI
   renderControls();
   renderTable(slice);
   renderPagination();
@@ -87,16 +128,17 @@ function renderControls() {
 
 function renderTable(heroes) {
   const cols = [
-    'icon','name','fullName','intelligence','strength',
-    'speed','durability','power','combat','race',
-    'gender','height','weight','birthPlace','alignment'
+    'icon','name','fullName',
+    'intelligence','strength','speed','durability','power','combat',
+    'race','gender','heightRaw','weightRaw',
+    'birthPlace','alignment'
   ];
   const labels = {
-    icon:'', name:'Name', fullName:'Full Name', intelligence:'Intelligence',
-    strength:'Strength', speed:'Speed', durability:'Durability',
-    power:'Power', combat:'Combat', race:'Race', gender:'Gender',
-    height:'Height', weight:'Weight', birthPlace:'Place of Birth',
-    alignment:'Alignment'
+    icon:'', name:'Name', fullName:'Full Name',
+    intelligence:'Intelligence', strength:'Strength', speed:'Speed',
+    durability:'Durability', power:'Power', combat:'Combat',
+    race:'Race', gender:'Gender', heightRaw:'Height', weightRaw:'Weight',
+    birthPlace:'Place of Birth', alignment:'Alignment'
   };
 
   const thead = document.querySelector('#hero-table thead');
@@ -104,9 +146,10 @@ function renderTable(heroes) {
 
   // Headers
   thead.innerHTML = '<tr>' + cols.map(c => {
-    const sorted = state.sortField === c;
+    const field = c.replace(/Raw$/, '');
+    const sorted = state.sortField === field;
     const arrow = sorted ? (state.sortDirection === 'asc' ? ' ▲' : ' ▼') : '';
-    return `<th data-field="${c}">${labels[c]}${arrow}</th>`;
+    return `<th data-field="${field}">${labels[c]}${arrow}</th>`;
   }).join('') + '</tr>';
 
   // Rows
@@ -115,35 +158,40 @@ function renderTable(heroes) {
       <td><img src="${h.icon}" alt=""></td>
       <td>${h.name}</td>
       <td>${h.fullName}</td>
-      <td>${h.intelligence || ''}</td>
-      <td>${h.strength || ''}</td>
-      <td>${h.speed || ''}</td>
-      <td>${h.durability || ''}</td>
-      <td>${h.power || ''}</td>
-      <td>${h.combat || ''}</td>
+      <td>${h.intelligence ?? ''}</td>
+      <td>${h.strength ?? ''}</td>
+      <td>${h.speed ?? ''}</td>
+      <td>${h.durability ?? ''}</td>
+      <td>${h.power ?? ''}</td>
+      <td>${h.combat ?? ''}</td>
       <td>${h.race}</td>
       <td>${h.gender}</td>
-      <td>${h.height || ''}</td>
-      <td>${h.weight || ''}</td>
+      <td>${h.heightRaw || ''}</td>
+      <td>${h.weightRaw || ''}</td>
       <td>${h.birthPlace}</td>
       <td>${h.alignment}</td>
     </tr>
   `).join('');
 
-  // Sort click
+  // Sorting click handlers
   thead.querySelectorAll('th').forEach(th => {
     th.onclick = () => {
-      const f = th.dataset.field;
-      if (state.sortField === f) state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
-      else { state.sortField = f; state.sortDirection = 'asc'; }
+      const field = th.dataset.field;
+      if (state.sortField === field) {
+        state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.sortField = field;
+        state.sortDirection = 'asc';
+      }
       renderApp();
     };
   });
 
-  // Detail click
+  // Detail view click handlers
   tbody.querySelectorAll('tr').forEach(tr => {
     tr.onclick = () => {
-      state.selectedHero = state.filteredHeroes.find(h => h.id === Number(tr.dataset.id));
+      const id = Number(tr.dataset.id);
+      state.selectedHero = state.filteredHeroes.find(h => h.id === id) || null;
       renderDetail();
     };
   });
@@ -161,8 +209,12 @@ function renderPagination() {
     html += `<button id="next" ${state.currentPage >= pages ? 'disabled' : ''}>Next</button>`;
   }
   pc.innerHTML = html;
-  pc.querySelector('#prev')?.addEventListener('click', () => { state.currentPage--; renderApp(); });
-  pc.querySelector('#next')?.addEventListener('click', () => { state.currentPage++; renderApp(); });
+  pc.querySelector('#prev')?.addEventListener('click', () => {
+    state.currentPage--; renderApp();
+  });
+  pc.querySelector('#next')?.addEventListener('click', () => {
+    state.currentPage++; renderApp();
+  });
 }
 
 function renderDetail() {
@@ -174,22 +226,25 @@ function renderDetail() {
     <h2>${h.name} (${h.fullName})</h2>
     <img src="${h.largeImage}" alt="">
     <ul>
-      <li><strong>Intelligence:</strong> ${h.intelligence || ''}</li>
-      <li><strong>Strength:</strong> ${h.strength || ''}</li>
-      <li><strong>Speed:</strong> ${h.speed || ''}</li>
-      <li><strong>Durability:</strong> ${h.durability || ''}</li>
-      <li><strong>Power:</strong> ${h.power || ''}</li>
-      <li><strong>Combat:</strong> ${h.combat || ''}</li>
+      <li><strong>Intelligence:</strong> ${h.intelligence ?? ''}</li>
+      <li><strong>Strength:</strong> ${h.strength ?? ''}</li>
+      <li><strong>Speed:</strong> ${h.speed ?? ''}</li>
+      <li><strong>Durability:</strong> ${h.durability ?? ''}</li>
+      <li><strong>Power:</strong> ${h.power ?? ''}</li>
+      <li><strong>Combat:</strong> ${h.combat ?? ''}</li>
       <li><strong>Race:</strong> ${h.race}</li>
       <li><strong>Gender:</strong> ${h.gender}</li>
-      <li><strong>Height:</strong> ${h.height ? h.height + ' cm' : ''}</li>
-      <li><strong>Weight:</strong> ${h.weight ? h.weight + ' kg' : ''}</li>
+      <li><strong>Height:</strong> ${h.heightRaw || ''}</li>
+      <li><strong>Weight:</strong> ${h.weightRaw || ''}</li>
       <li><strong>Born in:</strong> ${h.birthPlace}</li>
       <li><strong>Alignment:</strong> ${h.alignment}</li>
     </ul>
   `;
   d.hidden = false;
-  document.getElementById('detail-close').onclick = () => { state.selectedHero = null; renderDetail(); };
+  document.getElementById('detail-close').onclick = () => {
+    state.selectedHero = null;
+    renderDetail();
+  };
 }
 
 // --- Event Listeners ---
