@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sortable</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Superhero Directory</h1>
+    <div id="controls">
+      <input id="search-input" type="text" placeholder="Search heroes…">
+      <select id="page-size-select">
+        <option value="10">10</option>
+        <option value="20" selected>20</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="all">All</option>
+      </select>
+    </div>
+  </header>
+
+  <div class="table-container">
+    <table id="hero-table">
+      <thead></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div id="pagination-controls"></div>
+  <div id="detail-view" hidden></div>
+
+  <script src="test.js"></script>
+</body>
+</html>
