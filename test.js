@@ -31,16 +31,19 @@ function normalize(raw) {
   return raw.map(hero => {
     // Weight: choose metric if available, else imperial, else dash
     const impW  = hero.appearance.weight[0]; // e.g. "210 lb"
-    const metW  = hero.appearance.weight[1]; // e.g. "4 tons"
+    const metW  = hero.appearance.weight[1]; // e.g. "0 kg" or "4 tons"
     const metKg = parseWeight(metW);
     const impKg = parseWeight(impW);
     let weightVal, weightRaw;
     if (metKg > 0) {
-      weightVal = metKg; weightRaw = metW;
+      weightVal = metKg;
+      weightRaw = metW;
     } else if (impKg > 0) {
-      weightVal = impKg; weightRaw = impW;
+      weightVal = impKg;
+      weightRaw = impW;
     } else {
-      weightVal = null; weightRaw = '-';
+      weightVal = null;
+      weightRaw = '-';
     }
 
     // Height: metric cm/m, or imperial feet'inches", else dash
@@ -50,11 +53,14 @@ function normalize(raw) {
     const impCm = parseHeight(impH);
     let heightVal, heightRaw;
     if (metCm > 0) {
-      heightVal = metCm; heightRaw = metH;
+      heightVal = metCm;
+      heightRaw = metH;
     } else if (impCm > 0) {
-      heightVal = impCm; heightRaw = impH;
+      heightVal = impCm;
+      heightRaw = impH;
     } else {
-      heightVal = null; heightRaw = '-';
+      heightVal = null;
+      heightRaw = '-';
     }
 
     return {
@@ -91,32 +97,23 @@ function parseWeight(str = '') {
   const clean = str.replace(/,/g, '').toLowerCase();
   const n = parseFloat(clean);
   if (isNaN(n)) return null;
-  if (clean.includes('ton')) {
-    return n * 1000;
-  }
-  if (clean.includes('kg')) {
-    return n;
-  }
-  if (clean.includes('lb')) {
-    return n * 0.453592;
-  }
+  if (clean.includes('ton')) return n * 1000;       // metric tons → kg
+  if (clean.includes('kg'))  return n;               // kilograms
+  if (clean.includes('lb'))  return n * 0.453592;    // pounds → kg
   return n;
 }
 
 // Parse height strings into cm
 function parseHeight(str = '') {
   const clean = str.trim().toLowerCase();
-  // metric cm
   if (clean.includes('cm')) {
-    const num = parseFloat(clean);
-    return isNaN(num) ? null : num;
+    const n = parseFloat(clean);
+    return isNaN(n) ? null : n;
   }
-  // metric m
   if (clean.includes('m') && !clean.includes('cm')) {
-    const num = parseFloat(clean);
-    return isNaN(num) ? null : num * 100;
+    const n = parseFloat(clean);
+    return isNaN(n) ? null : n * 100;
   }
-  // imperial feet'inches", e.g. 6'7"
   const match = clean.match(/(\d+)'(\d+)/);
   if (match) {
     const feet = Number(match[1]);
@@ -133,12 +130,12 @@ function renderApp() {
     !term || h.name.toLowerCase().includes(term)
   );
 
-  // Sort missing last
+  // Sort: missing values last
   state.filteredHeroes.sort((a, b) => {
     const fa = a[state.sortField];
     const fb = b[state.sortField];
-    const missA = fa == null;
-    const missB = fb == null;
+    const missA = fa == null || fa === '-';
+    const missB = fb == null || fb === '-';
     if (missA && missB) return 0;
     if (missA) return 1;
     if (missB) return -1;
@@ -150,6 +147,7 @@ function renderApp() {
     return state.sortDirection === 'asc' ? fa - fb : fb - fa;
   });
 
+  // Paginate
   const slice = state.pageSize === 'all'
     ? state.filteredHeroes
     : state.filteredHeroes.slice(
@@ -176,16 +174,17 @@ function renderTable(heroes) {
     'birthPlace','alignment'
   ];
   const labels = {
-    icon:'', name:'Name', fullName:'Full Name',
-    intelligence:'Intelligence', strength:'Strength', speed:'Speed',
-    durability:'Durability', power:'Power', combat:'Combat',
-    race:'Race', gender:'Gender', heightRaw:'Height', weightRaw:'Weight',
-    birthPlace:'Place of Birth', alignment:'Alignment'
+    icon: '', name: 'Name', fullName: 'Full Name',
+    intelligence: 'Intelligence', strength: 'Strength', speed: 'Speed',
+    durability: 'Durability', power: 'Power', combat: 'Combat',
+    race: 'Race', gender: 'Gender', heightRaw: 'Height', weightRaw: 'Weight',
+    birthPlace: 'Place of Birth', alignment: 'Alignment'
   };
 
   const thead = document.querySelector('#hero-table thead');
   const tbody = document.querySelector('#hero-table tbody');
 
+  // Headers
   thead.innerHTML = '<tr>' + cols.map(c => {
     const field = c.replace(/Raw$/, '');
     const sorted = state.sortField === field;
@@ -193,6 +192,7 @@ function renderTable(heroes) {
     return `<th data-field="${field}">${labels[c]}${arrow}</th>`;
   }).join('') + '</tr>';
 
+  // Rows
   tbody.innerHTML = heroes.map(h => `
     <tr data-id="${h.id}">
       <td><img src="${h.icon}" alt=""></td>
@@ -213,6 +213,7 @@ function renderTable(heroes) {
     </tr>
   `).join('');
 
+  // Sorting handlers
   thead.querySelectorAll('th').forEach(th => {
     th.onclick = () => {
       const field = th.dataset.field;
@@ -226,6 +227,7 @@ function renderTable(heroes) {
     };
   });
 
+  // Detail view handlers
   tbody.querySelectorAll('tr').forEach(tr => {
     tr.onclick = () => {
       state.selectedHero = state.filteredHeroes.find(h => h.id === Number(tr.dataset.id)) || null;
