@@ -11,7 +11,6 @@ const state = {
   selectedHero: null
 };
 
-// --- Fetch & Initialize ---
 async function init() {
   try {
     const resp = await fetch('https://rawcdn.githack.com/akabab/superhero-api/0.2.0/api/all.json');
@@ -295,5 +294,4 @@ function attachEventListeners() {
   });
 }
 
-// --- Start ---
 document.addEventListener('DOMContentLoaded', init);
