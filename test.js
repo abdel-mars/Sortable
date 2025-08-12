@@ -47,27 +47,27 @@ function normalize(raw) {
     }
 
     const heightRaw = hero.appearance.height[1];  // e.g. "203 cm"
-    const heightVal = parseNum(heightRaw);
+    const heightVal = parseNum(heightRaw) || null;
 
     return {
       id: hero.id,
       icon: hero.images.xs,
       name: hero.name,
-      fullName: hero.biography.fullName || '',
+      fullName: hero.biography.fullName || '-',
       intelligence: parseStat(hero.powerstats.intelligence),
       strength:     parseStat(hero.powerstats.strength),
       speed:        parseStat(hero.powerstats.speed),
       durability:   parseStat(hero.powerstats.durability),
       power:        parseStat(hero.powerstats.power),
       combat:       parseStat(hero.powerstats.combat),
-      race: hero.appearance.race || '',
-      gender: hero.appearance.gender || '',
+      race: hero.appearance.race || '-',
+      gender: hero.appearance.gender || '-',
       height: heightVal,
       heightRaw,
       weight: weightVal,
       weightRaw,
-      birthPlace: hero.biography.placeOfBirth || '',
-      alignment: hero.biography.alignment || '',
+      birthPlace: hero.biography.placeOfBirth || '-',
+      alignment: hero.biography.alignment || '-',
       largeImage: hero.images.lg
     };
   });
@@ -109,18 +109,21 @@ function renderApp() {
     !term || h.name.toLowerCase().includes(term)
   );
 
-  // Sort
+  // Sort (missing values last)
   state.filteredHeroes.sort((a, b) => {
-    const va = a[state.sortField], vb = b[state.sortField];
-    if (va == null && vb == null) return 0;
-    if (va == null) return 1;
-    if (vb == null) return -1;
-    if (typeof va === 'string') {
+    const fa = a[state.sortField];
+    const fb = b[state.sortField];
+    const missingA = fa === null || fa === undefined || fa === '-';
+    const missingB = fb === null || fb === undefined || fb === '-';
+    if (missingA && missingB) return 0;
+    if (missingA) return 1;
+    if (missingB) return -1;
+    if (typeof fa === 'string') {
       return state.sortDirection === 'asc'
-        ? va.localeCompare(vb)
-        : vb.localeCompare(va);
+        ? fa.localeCompare(fb)
+        : fb.localeCompare(fa);
     }
-    return state.sortDirection === 'asc' ? va - vb : vb - va;
+    return state.sortDirection === 'asc' ? fa - fb : fb - fa;
   });
 
   // Paginate
@@ -175,22 +178,22 @@ function renderTable(heroes) {
       <td><img src="${h.icon}" alt=""></td>
       <td>${h.name}</td>
       <td>${h.fullName}</td>
-      <td>${h.intelligence ?? ''}</td>
-      <td>${h.strength ?? ''}</td>
-      <td>${h.speed ?? ''}</td>
-      <td>${h.durability ?? ''}</td>
-      <td>${h.power ?? ''}</td>
-      <td>${h.combat ?? ''}</td>
+      <td>${h.intelligence ?? '-'}</td>
+      <td>${h.strength ?? '-'}</td>
+      <td>${h.speed ?? '-'}</td>
+      <td>${h.durability ?? '-'}</td>
+      <td>${h.power ?? '-'}</td>
+      <td>${h.combat ?? '-'}</td>
       <td>${h.race}</td>
       <td>${h.gender}</td>
-      <td>${h.heightRaw || ''}</td>
-      <td>${h.weightRaw || ''}</td>
+      <td>${h.heightRaw ?? '-'}</td>
+      <td>${h.weightRaw ?? '-'}</td>
       <td>${h.birthPlace}</td>
       <td>${h.alignment}</td>
     </tr>
   `).join('');
 
-  // Sort handlers
+  // Sorting handlers
   thead.querySelectorAll('th').forEach(th => {
     th.onclick = () => {
       const field = th.dataset.field;
@@ -243,16 +246,16 @@ function renderDetail() {
     <h2>${h.name} (${h.fullName})</h2>
     <img src="${h.largeImage}" alt="">
     <ul>
-      <li><strong>Intelligence:</strong> ${h.intelligence ?? ''}</li>
-      <li><strong>Strength:</strong> ${h.strength ?? ''}</li>
-      <li><strong>Speed:</strong> ${h.speed ?? ''}</li>
-      <li><strong>Durability:</strong> ${h.durability ?? ''}</li>
-      <li><strong>Power:</strong> ${h.power ?? ''}</li>
-      <li><strong>Combat:</strong> ${h.combat ?? ''}</li>
+      <li><strong>Intelligence:</strong> ${h.intelligence ?? '-'}</li>
+      <li><strong>Strength:</strong> ${h.strength ?? '-'}</li>
+      <li><strong>Speed:</strong> ${h.speed ?? '-'}</li>
+      <li><strong>Durability:</strong> ${h.durability ?? '-'}</li>
+      <li><strong>Power:</strong> ${h.power ?? '-'}</li>
+      <li><strong>Combat:</strong> ${h.combat ?? '-'}</li>
       <li><strong>Race:</strong> ${h.race}</li>
       <li><strong>Gender:</strong> ${h.gender}</li>
-      <li><strong>Height:</strong> ${h.heightRaw || ''}</li>
-      <li><strong>Weight:</strong> ${h.weightRaw || ''}</li>
+      <li><strong>Height:</strong> ${h.heightRaw ?? '-'}</li>
+      <li><strong>Weight:</strong> ${h.weightRaw ?? '-'}</li>
       <li><strong>Born in:</strong> ${h.birthPlace}</li>
       <li><strong>Alignment:</strong> ${h.alignment}</li>
     </ul>
