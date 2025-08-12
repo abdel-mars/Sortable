@@ -26,11 +26,29 @@ async function init() {
   }
 }
 
-// --- Normalize & Unit Parsing ---
+// --- Normalize & Unit Parsing (with fallback imperial) ---
 function normalize(raw) {
   return raw.map(hero => {
-    const heightRaw = hero.appearance.height[1];    // e.g. "203 cm"
-    const weightRaw = hero.appearance.weight[1];    // e.g. "9,000 tons"
+    const imperialRaw = hero.appearance.weight[0]; // e.g. "210 lb"
+    const metricRaw   = hero.appearance.weight[1]; // e.g. "0 kg" or "4 tons"
+    const metricKg    = parseWeight(metricRaw);
+    const imperialKg  = parseWeight(imperialRaw);
+
+    let weightVal, weightRaw;
+    if (metricKg && metricKg > 0) {
+      weightVal = metricKg;
+      weightRaw = metricRaw;
+    } else if (imperialKg && imperialKg > 0) {
+      weightVal = imperialKg;
+      weightRaw = imperialRaw;
+    } else {
+      weightVal = null;
+      weightRaw = '-';
+    }
+
+    const heightRaw = hero.appearance.height[1];  // e.g. "203 cm"
+    const heightVal = parseNum(heightRaw);
+
     return {
       id: hero.id,
       icon: hero.images.xs,
@@ -44,9 +62,9 @@ function normalize(raw) {
       combat:       parseStat(hero.powerstats.combat),
       race: hero.appearance.race || '',
       gender: hero.appearance.gender || '',
-      height: parseNum(heightRaw),
-      weight: parseWeight(weightRaw),
+      height: heightVal,
       heightRaw,
+      weight: weightVal,
       weightRaw,
       birthPlace: hero.biography.placeOfBirth || '',
       alignment: hero.biography.alignment || '',
@@ -66,26 +84,26 @@ function parseNum(str = '') {
   return isNaN(n) ? null : n;
 }
 
-// --- FIXED: parseWeight now removes commas before parsing ---
+// Parse weight strings into kilograms (handles commas, tons, kg, lb)
 function parseWeight(str = '') {
-  const clean = str.replace(/,/g, '').toLowerCase(); // strip commas
+  const clean = str.replace(/,/g, '').toLowerCase();
   const n = parseFloat(clean);
   if (isNaN(n)) return null;
   if (clean.includes('ton')) {
-    // metric tons -> kilograms
-    return n * 1000;
-  } else if (clean.includes('kg')) {
+    return n * 1000;       // metric tons → kg
+  }
+  if (clean.includes('kg')) {
     return n;
-  } else if (clean.includes('lb')) {
-    // pounds to kg
-    return n * 0.453592;
+  }
+  if (clean.includes('lb')) {
+    return n * 0.453592;   // pounds → kg
   }
   return n;
 }
 
 // --- Render Cycle ---
 function renderApp() {
-  // Filter by search term
+  // Filter
   const term = state.searchTerm.toLowerCase();
   state.filteredHeroes = state.allHeroes.filter(h =>
     !term || h.name.toLowerCase().includes(term)
@@ -93,8 +111,7 @@ function renderApp() {
 
   // Sort
   state.filteredHeroes.sort((a, b) => {
-    const va = a[state.sortField];
-    const vb = b[state.sortField];
+    const va = a[state.sortField], vb = b[state.sortField];
     if (va == null && vb == null) return 0;
     if (va == null) return 1;
     if (vb == null) return -1;
@@ -114,7 +131,7 @@ function renderApp() {
         (state.currentPage - 1) * Number(state.pageSize) + Number(state.pageSize)
       );
 
-  // Render UI
+  // Render
   renderControls();
   renderTable(slice);
   renderPagination();
@@ -173,7 +190,7 @@ function renderTable(heroes) {
     </tr>
   `).join('');
 
-  // Sorting click handlers
+  // Sort handlers
   thead.querySelectorAll('th').forEach(th => {
     th.onclick = () => {
       const field = th.dataset.field;
@@ -187,7 +204,7 @@ function renderTable(heroes) {
     };
   });
 
-  // Detail view click handlers
+  // Detail view handlers
   tbody.querySelectorAll('tr').forEach(tr => {
     tr.onclick = () => {
       const id = Number(tr.dataset.id);
