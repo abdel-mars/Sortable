@@ -1,5 +1,7 @@
 # Superhero Directory
 
+# know everything about your superhero
+
 A searchable, sortable, paginated table of superheroes built with plain HTML, CSS, and JavaScript. Data comes from the [Superhero API](https://github.com/akabab/superhero-api) — no build step, no dependencies, no framework.
 
 ## Features
@@ -45,19 +47,3 @@ python3 -m http.server 8000
 ```
 
 Then open <http://localhost:8000>.
-
-## Deploy to GitHub Pages
-
-This project lives in the `sortable/` subfolder of the repository, so the Pages source must
-be the repository root:
-
-1. Go to the repository on GitHub → **Settings** → **Pages**.
-2. Under **Build and deployment**, set **Source** to **Deploy from a branch**.
-3. Select branch `main` and folder `/ (root)`, then **Save**.
-4. GitHub builds the site and publishes it at:
-
-   <https://abdel-mars.github.io/Raids-js/sortable/>
-
-Note: the bare root URL (`abdel-mars.github.io/Raids-js/`) will return 404 because the app
-is in a subfolder — `/sortable/` is the entry point. No configuration changes are needed,
-since all asset paths are relative.
