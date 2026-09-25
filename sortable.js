@@ -1,5 +1,6 @@
+import { parseWeight, parseHeight, parseStat } from './parse.js';
 
-// --- State ---
+
 const state = {
   allHeroes: [],
   filteredHeroes: [],
@@ -24,33 +25,30 @@ async function init() {
   }
 }
 
-// --- Normalize & Unit Parsing (with fallback imperial) ---
 function normalize(raw) {
   return raw.map(hero => {
-    // Weight: choose metric if available, else imperial, else dash
-    const impW  = hero.appearance.weight[0];
-    const metW  = hero.appearance.weight[1];
-    const metKg = parseWeight(metW);
-    const impKg = parseWeight(impW);
+    const lbStr  = hero.appearance.weight[0];
+    const kgStr  = hero.appearance.weight[1];
+    const kg = parseWeight(kgStr);
+    const lb = parseWeight(lbStr);
     let weightVal, weightRaw;
-    if (metKg > 0) {
-      weightVal = metKg; weightRaw = metW;
-    } else if (impKg > 0) {
-      weightVal = impKg; weightRaw = impW;
+    if (kg != null && kg > 0) {
+      weightVal = kg; weightRaw = kgStr;
+    } else if (lb != null && lb > 0) {
+      weightVal = lb; weightRaw = lbStr;
     } else {
       weightVal = null; weightRaw = '-';
     }
 
-    // Height: choose metric if available, else imperial, else dash
-    const impH  = hero.appearance.height[0];
-    const metH  = hero.appearance.height[1];
-    const metCm = parseHeight(metH);
-    const impCm = parseHeight(impH);
+    const footStr  = hero.appearance.height[0];
+    const cmOrMStr  = hero.appearance.height[1];
+    const cm = parseHeight(cmOrMStr);
+    const foot = parseHeight(footStr);
     let heightVal, heightRaw;
-    if (metCm > 0) {
-      heightVal = metCm; heightRaw = metH;
-    } else if (impCm > 0) {
-      heightVal = impCm; heightRaw = impH;
+    if (cm != null && cm > 0) {
+      heightVal = cm; heightRaw = cmOrMStr;
+    } else if (foot != null && foot > 0) {
+      heightVal = foot; heightRaw = footStr;
     } else {
       heightVal = null; heightRaw = '-';
     }
@@ -79,49 +77,12 @@ function normalize(raw) {
   });
 }
 
-function parseStat(val) {
-  const n = Number(val);
-  return isNaN(n) ? null : n;
-}
-
-// Parse weight strings into kg
-function parseWeight(str = '') {
-  const clean = str.replace(/,/g, '').toLowerCase();
-  const n = parseFloat(clean);
-  if (isNaN(n)) return null;
-  if (clean.includes('ton')) return n * 1000;
-  if (clean.includes('kg'))  return n;
-  if (clean.includes('lb'))  return n * 0.453592;
-  return n;
-}
-
-// Parse height strings into cm
-function parseHeight(str = '') {
-  const clean = str.trim().toLowerCase();
-  if (clean.includes('cm')) {
-    const n = parseFloat(clean);
-    return isNaN(n) ? null : n;
-  }
-  if (clean.includes('m') && !clean.includes('cm')) {
-    const n = parseFloat(clean);
-    return isNaN(n) ? null : n * 100;
-  }
-  const match = clean.match(/(\d+)'(\d+)/);
-  if (match) {
-    const feet = Number(match[1]), inches = Number(match[2]);
-    return feet * 30.48 + inches * 2.54;
-  }
-  return null;
-}
-
-// --- Render Cycle ---
 function renderApp() {
   const term = state.searchTerm.toLowerCase();
   state.filteredHeroes = state.allHeroes.filter(h =>
     !term || h.name.toLowerCase().includes(term)
   );
 
-  // Sort: normal values first, then special-start strings, then '-' entries
   state.filteredHeroes.sort((a, b) => {
     const fa = a[state.sortField], fb = b[state.sortField];
     const missA = fa == null || fa === '-';
@@ -130,13 +91,11 @@ function renderApp() {
     if (missA) return 1;
     if (missB) return -1;
 
-    // detect special-start (non-alphanumeric) for string fields
     const spA = (typeof fa === 'string') && !/^[A-Za-z0-9]/.test(fa);
     const spB = (typeof fb === 'string') && !/^[A-Za-z0-9]/.test(fb);
     if (!spA && spB) return -1;
     if (spA && !spB) return 1;
 
-    // both normal or both special
     if (typeof fa === 'string') {
       return state.sortDirection === 'asc'
         ? fa.localeCompare(fb)
@@ -145,19 +104,20 @@ function renderApp() {
     return state.sortDirection === 'asc' ? fa - fb : fb - fa;
   });
 
+  const perPage = Number(state.pageSize);
+  const page = state.currentPage;
+  const start = (page - 1) * perPage;
+  const end   = start + perPage;
+
   const slice = state.pageSize === 'all'
     ? state.filteredHeroes
-    : state.filteredHeroes.slice(
-        (state.currentPage - 1) * Number(state.pageSize),
-        (state.currentPage - 1) * Number(state.pageSize) + Number(state.pageSize)
-      );
+    : state.filteredHeroes.slice(start, end);
 
   renderControls();
   renderTable(slice);
   renderPagination();
 }
 
-// --- Render Helpers ---
 function renderControls() {
   document.getElementById('search-input').value = state.searchTerm;
   document.getElementById('page-size-select').value = state.pageSize;
@@ -185,12 +145,12 @@ function renderTable(heroes) {
     const field = c.replace(/Raw$/, '');
     const sorted = state.sortField === field;
     const arrow  = sorted ? (state.sortDirection==='asc'?' ▲':' ▼') : '';
-    return `<th data-field="${field}">${labels[c]}${arrow}</th>`;
+    return `<th data-field="${field}" tabindex="0">${labels[c]}${arrow}</th>`;
   }).join('') + '</tr>';
 
   tbody.innerHTML = heroes.map(h => `
     <tr data-id="${h.id}">
-      <td><img src="${h.icon}" alt=""></td>
+      <td><img src="${h.icon}" alt="${h.name} icon"></td>
       <td>${h.name}</td>
       <td>${h.fullName}</td>
       <td>${h.intelligence  ?? '-'}</td>
@@ -209,7 +169,7 @@ function renderTable(heroes) {
   `).join('');
 
   thead.querySelectorAll('th').forEach(th => {
-    th.onclick = () => {
+    const toggleSort = () => {
       const field = th.dataset.field;
       if (state.sortField === field) {
         state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
@@ -219,6 +179,13 @@ function renderTable(heroes) {
       }
       renderApp();
     };
+    th.onclick = toggleSort;
+    th.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleSort();
+      }
+    });
   });
 
   tbody.querySelectorAll('tr').forEach(tr => {
@@ -252,7 +219,7 @@ function renderDetail() {
   d.innerHTML = `
     <button id="detail-close">✖</button>
     <h2>${h.name} (${h.fullName})</h2>
-    <img src="${h.largeImage}" alt="">
+    <img src="${h.largeImage}" alt="${h.name} large image">
     <ul>
       <li><strong>Intelligence:</strong> ${h.intelligence  ?? '-'}</li>
       <li><strong>Strength:</strong>     ${h.strength      ?? '-'}</li>
@@ -275,7 +242,6 @@ function renderDetail() {
   };
 }
 
-// --- Event Listeners ---
 function attachEventListeners() {
   document.getElementById('search-input').addEventListener('input', e => {
     state.searchTerm = e.target.value;
@@ -288,10 +254,8 @@ function attachEventListeners() {
     renderApp();
   });
   
-  // Add logo click handler for refresh
   document.getElementById('logo').addEventListener('click', () => {
     window.location.reload();
   });
 }
-
 document.addEventListener('DOMContentLoaded', init);
